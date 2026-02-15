@@ -1,0 +1,122 @@
+networks:
+  ceph_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
+
+services:
+  mon1:
+    build: dockerfiles/mon1
+    user: ceph
+    entrypoint: ["/entrypoint.sh"]
+    command:
+      - "/bin/sh"
+      - "-c"
+      - >-
+        ceph-authtool /var/lib/ceph/tmp/ceph.mon.keyring --import-keyring /etc/ceph/ceph.client.admin.keyring;
+        ceph-authtool /var/lib/ceph/tmp/ceph.mon.keyring --import-keyring /etc/ceph/ceph.client.bootstrap-osd.keyring;
+        monmaptool --create --add mon1 ${MON_IP} --fsid ${FSID} /var/lib/ceph/tmp/monmap --clobber;
+        ceph-mon --mkfs -i mon1 --monmap /var/lib/ceph/tmp/monmap --keyring /var/lib/ceph/tmp/ceph.mon.keyring;
+        ceph-mon -i mon1 -f -d;
+    environment:
+      MON_IP: ${MON_IP}
+      FSID: ${FSID}
+    volumes:
+      - ./ceph:/etc/ceph
+    networks:
+      ceph_network:
+        ipv4_address: 172.30.0.2
+
+  mgr:
+    build: dockerfiles/mgr
+    command:
+      - "/bin/sh"
+      - "-c"
+      - >-
+        ceph auth get-or-create mgr.mgr mon 'allow profile mgr' osd 'allow *' mds 'allow *' > /var/lib/ceph/mgr/ceph-mgr/keyring;
+        ceph-mgr -f -i mgr;
+    volumes:
+      - ./ceph:/etc/ceph
+    depends_on:
+      - mon1
+    # ports:
+    #   - 8443:8443
+    networks:
+      ceph_network:
+
+  osd1:
+    pid: host
+    privileged: true
+    build: dockerfiles/osd1
+    environment:
+      OSD_UUID_1: ${OSD_UUID_1}
+    user: ceph
+    command:
+      - "/bin/sh"
+      - "-c"
+      - >-
+        ceph auth add osd.0 -i /var/lib/ceph/osd/ceph-0/keyring;
+        ceph osd new ${OSD_UUID_1} -n client.bootstrap-osd;
+        ceph-osd -i 0 --mkfs \
+          --osd-data /var/lib/ceph/osd/ceph-0 \
+          --osd-uuid ${OSD_UUID_1} \
+          --keyring /var/lib/ceph/osd/ceph-0/keyring;
+        ceph-osd -f -i 0;
+    volumes:
+      - ./ceph:/etc/ceph
+    depends_on:
+      - mon1
+    networks:
+      ceph_network:
+
+  rgw1:
+    build: dockerfiles/rgw1
+    environment:
+      MON_IP: ${MON_IP}
+      AWS_ACCESS_KEY_ID: ${RGW_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${RGW_SECRET_KEY}
+    command:
+      - "/bin/sh"
+      - "-c"
+      - >-
+        ceph auth get-or-create client.rgw1 mon 'allow rw' osd 'allow rwx';
+        ceph auth caps client.rgw1 mon 'allow rw' osd 'allow rwx';
+        ceph auth del client.rgw1;
+        ceph auth add client.rgw1 -i /var/lib/ceph/radosgw/ceph-rgw1/keyring;
+        radosgw-admin user create \
+          --uid="polaris-user" \
+          --display-name="Polaris User" \
+          --access-key="${RGW_ACCESS_KEY}" \
+          --secret-key="${RGW_SECRET_KEY}";
+        echo ">>> RGW user created (access=${RGW_ACCESS_KEY}, secret=${RGW_SECRET_KEY})";
+        radosgw -n client.rgw1 --rgw-frontends="beast port=7480" --foreground;
+    ports:
+      - "7480:7480"   # RGW HTTP endpoint (S3)
+      - "7481:7481"
+    volumes:
+      - ./ceph:/etc/ceph
+    depends_on:
+      - osd1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7480"]
+      interval: 2s
+      timeout: 10s
+      retries: 10
+      start_period: 10s
+    networks:
+      ceph_network:
+
+  aws-cli:
+    image: amazon/aws-cli:2.33.8
+    depends_on:
+      rgw1:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: ${RGW_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${RGW_SECRET_KEY}
+      AWS_ENDPOINT_URL: ${S3_ENDPOINT_URL}
+      AWS_REGION: ${S3_REGION}
+    tty: true
+    networks:
+      ceph_network:
