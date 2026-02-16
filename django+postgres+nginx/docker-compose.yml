@@ -1,14 +1,16 @@
 services:
   postgres:
     image: postgres:18.2
-    environment:
-      POSTGRES_PASSWORD: postgres
+    env_file:
+      - .env
 
   django:
     build: dockerfiles/django
+    env_file:
+      - .env
+    entrypoint: ["/app/entrypoint.sh"]
     volumes:
       - ./src:/app/src
-    entrypoint: ["/app/entrypoint.sh"]
     depends_on:
       - postgres
 
