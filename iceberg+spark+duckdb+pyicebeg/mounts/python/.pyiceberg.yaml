@@ -1,0 +1,21 @@
+catalog:
+  test_catalog:
+    # Storage
+    s3.endpoint: http://rgw1:7480
+    s3.access-key-id: POLARIS123ACCESS
+    s3.secret-access-key: POLARIS456SECRET
+
+    # OAuth2
+    auth:
+      type: oauth2
+      oauth2:
+        client_id: root
+        client_secret: s3cr3t
+        token_url: http://polaris:8181/api/catalog/v1/oauth/tokens
+        scope: PRINCIPAL_ROLE:ALL    
+
+    # Catalog
+    type: rest
+    uri: http://polaris:8181/api/catalog
+    warehouse: test_catalog
+    header.X-Iceberg-Access-Delegation: ""

@@ -1,0 +1,17 @@
+spark-sql \
+    --packages org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.1,org.apache.iceberg:iceberg-aws-bundle:1.10.1 \
+    --conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions \
+    --conf spark.sql.catalog.test_catalog=org.apache.iceberg.spark.SparkCatalog \
+    --conf spark.sql.catalog.test_catalog.io-impl=org.apache.iceberg.aws.s3.S3FileIO \
+    --conf spark.sql.catalog.test_catalog.s3.endpoint=http://rgw1:7480 \
+    --conf spark.sql.catalog.test_catalog.s3.access-key-id=POLARIS123ACCESS \
+    --conf spark.sql.catalog.test_catalog.s3.secret-access-key=POLARIS456SECRET \
+    --conf spark.sql.catalog.test_catalog.rest.auth.type=oauth2 \
+    --conf spark.sql.catalog.test_catalog.credential=root:s3cr3t \
+    --conf spark.sql.catalog.test_catalog.oauth2-server-uri=http://polaris:8181/api/catalog/v1/oauth/tokens \
+    --conf spark.sql.catalog.test_catalog.scope=PRINCIPAL_ROLE:ALL \
+    --conf spark.sql.catalog.test_catalog.token-refresh-enabled=true \
+    --conf spark.sql.catalog.test_catalog.type=rest \
+    --conf spark.sql.catalog.test_catalog.uri=http://polaris:8181/api/catalog \
+    --conf spark.sql.catalog.test_catalog.warehouse=test_catalog \
+    --conf spark.sql.catalog.test_catalog.client.region=irrelevant
